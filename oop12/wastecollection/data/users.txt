@@ -1,0 +1,6 @@
+joshua|12345678|kent joshua francisco|2024-0974|Barangay Official
+shien|12345678|Shehani Shien|BRGY-3313|Barangay Official
+admin|password123|System Administrator|ADM1-0001|Administrator
+juan|password123|Juan Dela Cruz|TRK0-0005|Garbage Collector
+bian|qazqazqaz|Bianca Benaldo|1234-0987|Administrator
+shien123|shehani2005|Shehani Shien Tlangtalang|BRGY-5140|Barangay Official
