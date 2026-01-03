@@ -1,0 +1,14 @@
+Jung1994|Hoseok@94|Jung Hoseok|BRGY-4100|Barangay Official|false
+qazqaz|QAZqaz123|bianca benaldo|BRGY-5466|Barangay Official|false
+oya123|Oya@2007|Munure Ozalp|BRGY-2689|Barangay Official|false
+admin|password123|System Administrator|ADM1-0001|Administrator|false
+juan|password123|Juan Dela Cruz|TRK0-0005|Garbage Collector|true
+Sowera2018|Wiwang@18|Sowera Talangtalang|TRK0-0406|Garbage Collector|false
+qazqaz12345|QAZqaz12345|bianca benaldo|ADM1-7975|Administrator|false
+Shehani123|talangtalang123|Shehani Talangtalang|TRK0-1688|Garbage Collector|true
+jayjay|QAZqaz123|Jay R Benaldo|TRK0-1765|Garbage Collector|false
+qazqaz123|QAZqaz12345|bianca benaldo|ADM1-7135|Administrator|false
+KENT2005|kent2005|Kent Francisco|BRGY-5010|Barangay Official|false
+Biangiski|Biang_123|Bianca Benaldo|ADM1-3446|Administrator|false
+Shien2005|talangtalang123|Shehani Shien|TRK0-5991|Garbage Collector|false
+joshwa|QWEqwe123!|Joshua Guimare|TRK0-6459|Garbage Collector|false

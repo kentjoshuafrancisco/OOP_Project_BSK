@@ -3,6 +3,7 @@ import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import javax.swing.Timer;
 
 import java.awt.*;
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.regex.Pattern;
 import java.util.Random;
+import java.util.List;
 
 /**
  * Barangay Waste Management & MRF Portal
@@ -44,16 +46,19 @@ public class BarangayWasteSystemFull extends JFrame {
 
     
 
-    // --- Auth Store and State ---
+    //  Auth Store and State 
     // User credentials are now saved in the database
     private UserInfo loggedInUser = null;
 
-    // --- System State Variables ---
+    // System State Variables 
     private JPanel mainCardPanel;
     private CardLayout cardLayout = new CardLayout();
     private JLabel dashboardGreetingLabel;
     private JLabel nameLabel, roleLabel, idLabel; // Sidebar references
     private JLabel totalWeightLabel, totalBioLabel, totalRecyLabel, totalResiLabel; // Analytics references
+    private String currentFilterDate = null; // For date filtering in analytics
+    private JPanel cardHolder; // Dashboard card container for role-based visibility
+    private JPanel wasteGiverCard, collectionLogCard, analyticsCard, mrfCard; // Dashboard card references for visibility control
     // Admin control button (login activity persisted in DatabaseManager)
     private JButton viewLoginsBtn;
     private JButton viewDatabaseBtn;
@@ -61,13 +66,16 @@ public class BarangayWasteSystemFull extends JFrame {
     // --- Waste Data Model ---
     private DefaultTableModel wasteGiverTableModel;
     private DefaultTableModel collectionLogTableModel;
-    private final String[] WASTE_GIVER_COLUMNS = {"Date", "Purok", "Giver Name", "Waste Type", "Weight (kg)"};
-    private final String[] COLLECTION_LOG_COLUMNS = {"Date", "Truck ID", "Purok/Route","Driver", "Biodegradable (kg)", "Recyclable (kg)", "Residual (kg)"};
+    private final String[] WASTE_GIVER_COLUMNS = {"Date", "Purok", "Giver Name", "Waste Type", "Weight (kg)", "Entered By"};
+    private final String[] COLLECTION_LOG_COLUMNS = {"Date", "Truck ID", "Purok/Route","Driver", "Biodegradable (kg)", "Recyclable (kg)", "Residual (kg)", "Entered By"};
     private final String[] PUROK_OPTIONS = {"Purok 1", "Purok 2", "Purok 3", "Purok 4", "Purok 5", "Purok 6"};
     private final String[] WASTE_TYPE_OPTIONS = {"Biodegradable", "Recyclable", "Residual"};
 
     // --- Pattern for Employee ID ---
     private static final Pattern EMPLOYEE_ID_PATTERN = Pattern.compile("^[A-Z0-9]{4}-[A-Z0-9]{4}$");
+
+    // --- Pattern for Password Strength ---
+    private static final Pattern PASSWORD_PATTERN = Pattern.compile("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$");
 
     public BarangayWasteSystemFull() {
         super("Barangay Waste Management & MRF Portal");
@@ -102,8 +110,6 @@ public class BarangayWasteSystemFull extends JFrame {
         mainCardPanel.add(createAuthPanel(true), "Login");
         mainCardPanel.add(createAuthPanel(false), "SignUp");
         mainCardPanel.add(createSystemDashboard(), "Dashboard");
-        mainCardPanel.add(createWasteGiverLogScreen(), "GiverLog");
-        mainCardPanel.add(createCollectionLogScreen(), "CollectionLog");
         mainCardPanel.add(createMRFPlaceholderScreen(), "MRFPlaceholder");
         mainCardPanel.add(createWasteAnalyticsScreen(), "Analytics");
 
@@ -124,6 +130,12 @@ public class BarangayWasteSystemFull extends JFrame {
         if (!DatabaseManager.userExists("juan")) {
             DatabaseManager.registerUser("juan", "password123", "Juan Dela Cruz", "TRK0-0005", "Garbage Collector");
         }
+        if (!DatabaseManager.userExists("oya123")) {
+            DatabaseManager.registerUser("oya123", "password123", "Oya Santos", "BRGY-0001", "Barangay Official");
+        }
+        if (!DatabaseManager.userExists("jayjay")) {
+            DatabaseManager.registerUser("jayjay", "password123", "Jayjay Reyes", "TRK0-0006", "Garbage Collector");
+        }
         // Ensure all current users (including any previously requested accounts) are persisted
         DatabaseManager.saveAllUsers();
     }
@@ -132,18 +144,22 @@ public class BarangayWasteSystemFull extends JFrame {
     private void initializeDataModel() {
         wasteGiverTableModel = new DefaultTableModel(WASTE_GIVER_COLUMNS, 0);
         collectionLogTableModel = new DefaultTableModel(COLLECTION_LOG_COLUMNS, 0);
-    
+
         String date1 = LocalDate.now().minusDays(1).format(DateTimeFormatter.ofPattern("MMM d"));
         String date2 = LocalDate.now().minusDays(2).format(DateTimeFormatter.ofPattern("MMM d"));
-        wasteGiverTableModel.addRow(new Object[]{date1, "Purok 1", "Maria Santos", "Recyclable", 3.5});
-        wasteGiverTableModel.addRow(new Object[]{date1, "Purok 1", "Ricardo Reyes", "Biodegradable", 6.1});
-        wasteGiverTableModel.addRow(new Object[]{date2, "Purok 2", "Elisa Garcia", "Residual", 1.8});
-        wasteGiverTableModel.addRow(new Object[]{date2, "Purok 3", "Benito Jose", "Recyclable", 4.0});
+
+        // Records for oya123 (Barangay Official)
+        wasteGiverTableModel.addRow(new Object[]{date1, "Purok 4", "Ana Lopez", "Biodegradable", 5.2, "oya123"});
+        wasteGiverTableModel.addRow(new Object[]{date2, "Purok 5", "Carlos Mendoza", "Recyclable", 2.8, "oya123"});
 
         String today = LocalDate.now().format(DateTimeFormatter.ofPattern("MMM d"));
-        collectionLogTableModel.addRow(new Object[]{today, "T-001", "Route A (Puroks 1, 2)", "Ramon Cruz", 125.5, 45.2, 80.0, 18.2, 45});
-        collectionLogTableModel.addRow(new Object[]{today, "T-002", "Route B (Puroks 3, 4)", "Liza Morales", 98.0, 31.7, 65.5, 25.5, 60});
-        collectionLogTableModel.addRow(new Object[]{date1, "T-003", "Route C (Puroks 5, 6)", "Jose Alvarez", 150.0, 50.0, 70.0, 30.0, 55});
+        collectionLogTableModel.addRow(new Object[]{today, "T-001", "Route A (Puroks 1, 2)", "Ramon Cruz", 125.5, 45.2, 80.0, "jayjay"});
+        collectionLogTableModel.addRow(new Object[]{today, "T-002", "Route B (Puroks 3, 4)", "Liza Morales", 98.0, 31.7, 65.5, "jayjay"});
+        collectionLogTableModel.addRow(new Object[]{date1, "T-003", "Route C (Puroks 5, 6)", "Jose Alvarez", 150.0, 50.0, 70.0, "jayjay"});
+
+        // Records for jayjay (Garbage Collector)
+        collectionLogTableModel.addRow(new Object[]{date1, "T-004", "Route D (Puroks 1, 3)", "Pedro Garcia", 110.0, 40.0, 75.0, "jayjay"});
+        collectionLogTableModel.addRow(new Object[]{date2, "T-005", "Route E (Puroks 2, 4)", "Maria Santos", 95.0, 35.0, 60.0, "jayjay"});
     }
 
 
@@ -211,6 +227,10 @@ public class BarangayWasteSystemFull extends JFrame {
     }
 
     private void calculateAndDisplayAnalytics() {
+        calculateAndDisplayAnalytics(null);
+    }
+
+    private void calculateAndDisplayAnalytics(String filterDate) {
         // Simple calculation using simulated data from the Collection Log
         double totalWeight = 0;
         double totalBio = 0;
@@ -218,33 +238,39 @@ public class BarangayWasteSystemFull extends JFrame {
         double totalResi = 0;
 
         for (int i = 0; i < collectionLogTableModel.getRowCount(); i++) {
+            String rowDate = (String) collectionLogTableModel.getValueAt(i, 0);
+            if (filterDate != null && !filterDate.trim().isEmpty() && !rowDate.equalsIgnoreCase(filterDate.trim())) {
+                continue; // Skip rows that don't match the filter date
+            }
+
             // Ensure data types are handled correctly (assuming doubles based on init data)
             try {
                 // Get values and handle potential errors in casting
                 Object bioValue = collectionLogTableModel.getValueAt(i, 4);
                 Object recyValue = collectionLogTableModel.getValueAt(i, 5);
                 Object resiValue = collectionLogTableModel.getValueAt(i, 6);
-                
+
                 double bio = (bioValue instanceof Number) ? ((Number) bioValue).doubleValue() : 0.0;
                 double recy = (recyValue instanceof Number) ? ((Number) recyValue).doubleValue() : 0.0;
                 double resi = (resiValue instanceof Number) ? ((Number) resiValue).doubleValue() : 0.0;
-                
+
                 totalBio += bio;
                 totalRecy += recy;
                 totalResi += resi;
                 totalWeight += bio + recy + resi;
             } catch (Exception ex) {
                 System.err.println("Error calculating analytics: Data conversion failed at row " + i + ". " + ex.getMessage());
-                
+
             }
         }
-        
+
         // Handle division by zero if totalWeight is 0
         String bioPercent = (totalWeight > 0) ? df.format((totalBio / totalWeight) * 100) : "0.00";
         String recyPercent = (totalWeight > 0) ? df.format((totalRecy / totalWeight) * 100) : "0.00";
         String resiPercent = (totalWeight > 0) ? df.format((totalResi / totalWeight) * 100) : "0.00";
 
-        totalWeightLabel.setText("Total Collected: " + df.format(totalWeight) + " kg");
+        String dateSuffix = (filterDate != null && !filterDate.trim().isEmpty()) ? " on " + filterDate : "";
+        totalWeightLabel.setText("Total Collected: " + df.format(totalWeight) + " kg" + dateSuffix);
         totalBioLabel.setText("Biodegradable: " + df.format(totalBio) + " kg (" + bioPercent + "%)");
         totalRecyLabel.setText("Recyclable: " + df.format(totalRecy) + " kg (" + recyPercent + "%)");
         totalResiLabel.setText("Residual: " + df.format(totalResi) + " kg (" + resiPercent + "%)");
@@ -253,15 +279,15 @@ public class BarangayWasteSystemFull extends JFrame {
     
     private JPanel createLogScreen(String title, DefaultTableModel model, boolean isGiverLog) {
         JPanel panel = new JPanel(new BorderLayout());
-        
-        // --- Header Panel (Title + Back Button) ---
+
+        // Header Panel (Title + Back Button)
         JPanel headerPanel = new JPanel(new BorderLayout());
         JLabel titleLabel = new JLabel(title, JLabel.CENTER);
         titleLabel.setFont(FONT_HEADER);
         titleLabel.setBorder(new EmptyBorder(20, 0, 20, 0));
-        headerPanel.add(titleLabel, BorderLayout.CENTER); 
-        
-        // "Back to Dashboard" button 
+        headerPanel.add(titleLabel, BorderLayout.CENTER);
+
+        // "Back to Dashboard" button
         JButton backButton = createStyledButton("⬅️ Back to Dashboard", INFO_BLUE, Color.WHITE);
         backButton.addActionListener(e -> cardLayout.show(mainCardPanel, "Dashboard"));
         JPanel backWrap = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -270,21 +296,87 @@ public class BarangayWasteSystemFull extends JFrame {
         headerPanel.add(backWrap, BorderLayout.WEST);
 
         panel.add(headerPanel, BorderLayout.NORTH);
-        
-        JTable table = createStyledTable(model);
-        panel.add(new JScrollPane(table), BorderLayout.CENTER);
 
-        // --- Footer Panel for Add/Delete ---
+        // Search Panel 
+        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        searchPanel.setBorder(new EmptyBorder(10, 20, 10, 20));
+        searchPanel.setBackground(BACKGROUND_FADE_GREEN);
+        JLabel searchLabel = new JLabel("Search Records: ");
+        searchLabel.setFont(FONT_PLAIN_16);
+        JTextField searchField = new JTextField(15);
+        searchField.setFont(FONT_PLAIN_16);
+        JButton searchBtn = createStyledButton("SEARCH", PRIMARY_GREEN, Color.WHITE);
+        JButton clearSearchBtn = createStyledButton("CLEAR SEARCH", INFO_BLUE, Color.WHITE);
+        searchPanel.add(searchLabel);
+        searchPanel.add(searchField);
+        searchPanel.add(searchBtn);
+        searchPanel.add(clearSearchBtn);
+
+        JTable table = createStyledTable(model);
+        TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(model);
+        table.setRowSorter(sorter);
+
+        // Define role-based filter
+        final RowFilter<DefaultTableModel, Integer> roleFilter;
+        if (loggedInUser != null && !"Administrator".equalsIgnoreCase(loggedInUser.getRole())) {
+            int enteredByColumn = model.getColumnCount() - 1; // "Entered By" is the last column
+            roleFilter = RowFilter.regexFilter("^" + loggedInUser.getUsername() + "$", enteredByColumn);
+        } else {
+            roleFilter = null;
+        }
+
+        // Apply initial role-based filtering
+        sorter.setRowFilter(roleFilter);
+
+        JScrollPane scrollPane = new JScrollPane(table);
+
+        // Search action
+        searchBtn.addActionListener(e -> {
+            String searchText = searchField.getText().trim();
+            if (!searchText.isEmpty()) {
+                RowFilter<DefaultTableModel, Integer> searchFilter = RowFilter.regexFilter(searchText);
+                if (roleFilter != null) {
+                    sorter.setRowFilter(RowFilter.andFilter(java.util.Arrays.asList(roleFilter, searchFilter)));
+                } else {
+                    sorter.setRowFilter(searchFilter);
+                }
+            } else {
+                sorter.setRowFilter(roleFilter);
+            }
+        });
+
+        // Clear search action
+        clearSearchBtn.addActionListener(e -> {
+            searchField.setText("");
+            sorter.setRowFilter(roleFilter);
+        });
+
+        // --- Center Panel (Search + Table) ---
+        JPanel centerPanel = new JPanel(new BorderLayout());
+        centerPanel.add(searchPanel, BorderLayout.NORTH);
+        centerPanel.add(scrollPane, BorderLayout.CENTER);
+
+        panel.add(centerPanel, BorderLayout.CENTER);
+
+        // --- Footer Panel for Add/Delete/Edit ---
         JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 15));
-        
-        JButton deleteButton = createStyledButton("➖ DELETE SELECTED RECORD", ERROR_RED, Color.WHITE);
-        deleteButton.addActionListener(e -> deleteSelectedRow(table, model));
-        
-        JButton addButton = createStyledButton("+ ADD NEW RECORD", isGiverLog ? PRIMARY_GREEN : DARK_GREEN, Color.WHITE);
-        addButton.addActionListener(e -> launchAddRecordDialog(isGiverLog, model));
-        
-        footer.add(deleteButton);
-        footer.add(addButton);
+
+        boolean canModify = loggedInUser != null && !"Administrator".equalsIgnoreCase(loggedInUser.getRole());
+
+        if (canModify) {
+            JButton deleteButton = createStyledButton("➖ DELETE SELECTED RECORD", ERROR_RED, Color.WHITE);
+            deleteButton.addActionListener(e -> deleteSelectedRow(table, model));
+
+            JButton editButton = createStyledButton("✏️ EDIT SELECTED RECORD", INFO_BLUE, Color.WHITE);
+            editButton.addActionListener(e -> launchEditRecordDialog(isGiverLog, table, model));
+
+            JButton addButton = createStyledButton("+ ADD NEW RECORD", isGiverLog ? PRIMARY_GREEN : DARK_GREEN, Color.WHITE);
+            addButton.addActionListener(e -> launchAddRecordDialog(isGiverLog, model));
+
+            footer.add(deleteButton);
+            footer.add(editButton);
+            footer.add(addButton);
+        }
 
         panel.add(footer, BorderLayout.SOUTH);
 
@@ -298,7 +390,128 @@ public class BarangayWasteSystemFull extends JFrame {
             addCollectionLogRecord(model);
         }
     }
+
+    private void launchEditRecordDialog(boolean isGiverLog, JTable table, DefaultTableModel model) {
+        int selectedRow = table.getSelectedRow();
+        if (selectedRow < 0) {
+            JOptionPane.showMessageDialog(this, "Please select a row to edit.", "No Selection", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        int modelRow = table.convertRowIndexToModel(selectedRow);
+
+        if (isGiverLog) {
+            editWasteGiverRecord(model, modelRow);
+        } else {
+            editCollectionLogRecord(model, modelRow);
+        }
+    }
     
+    private void editCollectionLogRecord(DefaultTableModel model, int modelRow) {
+        // Retrieve existing values
+        String date = (String) model.getValueAt(modelRow, 0);
+        String truckId = (String) model.getValueAt(modelRow, 1);
+        String route = (String) model.getValueAt(modelRow, 2);
+        String driver = (String) model.getValueAt(modelRow, 3);
+        double bio = ((Number) model.getValueAt(modelRow, 4)).doubleValue();
+        double recy = ((Number) model.getValueAt(modelRow, 5)).doubleValue();
+        double resi = ((Number) model.getValueAt(modelRow, 6)).doubleValue();
+
+        // Create fields pre-filled with existing data
+        JTextField dateField = new JTextField(date);
+        JTextField truckIdField = new JTextField(truckId);
+        JTextField routeField = new JTextField(route);
+        JTextField driverField = new JTextField(driver);
+        JFormattedTextField bioWeightField = createNumericInputField();
+        bioWeightField.setValue(bio);
+        JFormattedTextField recyWeightField = createNumericInputField();
+        recyWeightField.setValue(recy);
+        JFormattedTextField resiWeightField = createNumericInputField();
+        resiWeightField.setValue(resi);
+
+        JPanel panel = createFormPanel(
+            new String[]{"Date:", "Truck ID:", "Purok/Route:", "Driver:", "Biodegradable (kg):", "Recyclable (kg):", "Residual (kg):"},
+            new JComponent[]{dateField, truckIdField, routeField, driverField, bioWeightField, recyWeightField, resiWeightField}
+        );
+
+        int result = JOptionPane.showConfirmDialog(this, panel, "Edit Truck Collection Log",
+            JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+        if (result == JOptionPane.OK_OPTION) {
+            try {
+                // Parse values, ensuring they are valid numbers
+                double newBio = parseNumericField(bioWeightField);
+                double newRecy = parseNumericField(recyWeightField);
+                double newResi = parseNumericField(resiWeightField);
+
+                // Update the model row
+                model.setValueAt(dateField.getText(), modelRow, 0);
+                model.setValueAt(truckIdField.getText().trim(), modelRow, 1);
+                model.setValueAt(routeField.getText().trim(), modelRow, 2);
+                model.setValueAt(driverField.getText().trim(), modelRow, 3);
+                model.setValueAt(newBio, modelRow, 4);
+                model.setValueAt(newRecy, modelRow, 5);
+                model.setValueAt(newResi, modelRow, 6);
+                // Entered By remains unchanged
+
+                JOptionPane.showMessageDialog(this, "Collection Log entry updated successfully.", "Success", JOptionPane.INFORMATION_MESSAGE);
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Invalid numeric data entered: " + ex.getMessage(), "Input Error", JOptionPane.ERROR_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Please fill all fields correctly.", "Input Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+
+    private void editWasteGiverRecord(DefaultTableModel model, int modelRow) {
+        // Retrieve existing values
+        String date = (String) model.getValueAt(modelRow, 0);
+        String purok = (String) model.getValueAt(modelRow, 1);
+        String giverName = (String) model.getValueAt(modelRow, 2);
+        String wasteType = (String) model.getValueAt(modelRow, 3);
+        double weight = ((Number) model.getValueAt(modelRow, 4)).doubleValue();
+
+        // Create fields pre-filled with existing data
+        JTextField dateField = new JTextField(date);
+        JComboBox<String> purokDropdown = new JComboBox<>(PUROK_OPTIONS);
+        purokDropdown.setSelectedItem(purok);
+        JTextField giverNameField = new JTextField(giverName);
+        JComboBox<String> wasteTypeDropdown = new JComboBox<>(WASTE_TYPE_OPTIONS);
+        wasteTypeDropdown.setSelectedItem(wasteType);
+        JFormattedTextField weightField = createNumericInputField();
+        weightField.setValue(weight);
+
+        JPanel panel = createFormPanel(
+            new String[]{"Date:", "Purok:", "Giver Name:", "Waste Type:", "Weight (kg):"},
+            new JComponent[]{dateField, purokDropdown, giverNameField, wasteTypeDropdown, weightField}
+        );
+
+        int result = JOptionPane.showConfirmDialog(this, panel, "Edit Household Waste Contribution",
+            JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+        if (result == JOptionPane.OK_OPTION) {
+            try {
+                // Parse values, ensuring they are valid numbers
+                double newWeight = parseNumericField(weightField);
+
+                // Update the model row
+                model.setValueAt(dateField.getText(), modelRow, 0);
+                model.setValueAt(purokDropdown.getSelectedItem(), modelRow, 1);
+                model.setValueAt(giverNameField.getText().trim(), modelRow, 2);
+                model.setValueAt(wasteTypeDropdown.getSelectedItem(), modelRow, 3);
+                model.setValueAt(newWeight, modelRow, 4);
+                // Entered By remains unchanged
+
+                JOptionPane.showMessageDialog(this, "Waste Giver record updated successfully.", "Success", JOptionPane.INFORMATION_MESSAGE);
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Invalid numeric data entered: " + ex.getMessage(), "Input Error", JOptionPane.ERROR_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Please fill all fields correctly.", "Input Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+
     // --- Giver Log Record ---
     private void addWasteGiverRecord(DefaultTableModel model) {
         JTextField dateField = new JTextField(LocalDate.now().format(DateTimeFormatter.ofPattern("MMM d")));
@@ -317,15 +530,15 @@ public class BarangayWasteSystemFull extends JFrame {
 
         if (result == JOptionPane.OK_OPTION) {
             try {
-                double weight = Double.parseDouble(weightField.getText().replaceAll("[^\\d.]", ""));
-                if (weight <= 0) throw new NumberFormatException("Weight must be positive.");
-                
+                double weight = parseNumericField(weightField);
+
                 model.addRow(new Object[]{
                     dateField.getText(),
                     purokDropdown.getSelectedItem(),
                     giverNameField.getText().trim(),
                     wasteTypeDropdown.getSelectedItem(),
-                    weight 
+                    weight,
+                    loggedInUser.getUsername()
                 });
                 JOptionPane.showMessageDialog(this, "Waste Giver record added successfully.", "Success", JOptionPane.INFORMATION_MESSAGE);
             } catch (NumberFormatException ex) {
@@ -345,15 +558,13 @@ public class BarangayWasteSystemFull extends JFrame {
         JFormattedTextField bioWeightField = createNumericInputField();
         JFormattedTextField recyWeightField = createNumericInputField();
         JFormattedTextField resiWeightField = createNumericInputField();
-        JFormattedTextField distanceField = createNumericInputField();
-        JFormattedTextField durationField = createNumericInputField();
 
         JPanel panel = createFormPanel(
-            new String[]{"Date:", "Truck ID:", "Purok/Route:", "Driver:", "Biodegradable (kg):", "Recyclable (kg):", "Residual (kg):", "Distance (km):", "Duration (min):"},
-            new JComponent[]{dateField, truckIdField, routeField, driverField, bioWeightField, recyWeightField, resiWeightField, distanceField, durationField}
+            new String[]{"Date:", "Truck ID:", "Purok/Route:", "Driver:", "Biodegradable (kg):", "Recyclable (kg):", "Residual (kg):"},
+            new JComponent[]{dateField, truckIdField, routeField, driverField, bioWeightField, recyWeightField, resiWeightField}
         );
 
-        int result = JOptionPane.showConfirmDialog(this, panel, "Add Truck Collection Log", 
+        int result = JOptionPane.showConfirmDialog(this, panel, "Add Truck Collection Log",
             JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
 
         if (result == JOptionPane.OK_OPTION) {
@@ -362,15 +573,14 @@ public class BarangayWasteSystemFull extends JFrame {
                 double bio = parseNumericField(bioWeightField);
                 double recy = parseNumericField(recyWeightField);
                 double resi = parseNumericField(resiWeightField);
-                double dist = parseNumericField(distanceField);
-                int duration = (int)parseNumericField(durationField); // Duration as integer
-                
+
                 model.addRow(new Object[]{
                     dateField.getText(),
                     truckIdField.getText().trim(),
                     routeField.getText().trim(),
                     driverField.getText().trim(),
-                    bio, recy, resi, dist, duration
+                    bio, recy, resi,
+                    loggedInUser.getUsername()
                 });
                 JOptionPane.showMessageDialog(this, "Collection Log entry added successfully.", "Success", JOptionPane.INFORMATION_MESSAGE);
             } catch (NumberFormatException ex) {
@@ -774,8 +984,14 @@ public class BarangayWasteSystemFull extends JFrame {
                 timer.setRepeats(false);
                 timer.start();
             } else {
-                feedback.setText("Login failed: Invalid username or password.");
-                feedback.setForeground(ERROR_RED);
+                // Check if user exists and is suspended
+                if (DatabaseManager.userExists(username) && DatabaseManager.isUserSuspended(username)) {
+                    feedback.setText("LogIn Failed: Account is Suspended.");
+                    feedback.setForeground(ERROR_RED);
+                } else {
+                    feedback.setText("Login failed: Invalid username or password.");
+                    feedback.setForeground(ERROR_RED);
+                }
             }
         } else {
             // Sign Up logic
@@ -787,6 +1003,9 @@ public class BarangayWasteSystemFull extends JFrame {
             }
             if (!password.equals(confirmPassword)) {
                 feedback.setText("Passwords do not match."); feedback.setForeground(ERROR_RED); return;
+            }
+            if (!PASSWORD_PATTERN.matcher(password).matches()) {
+                feedback.setText("<html>Password requires minimum 8 characters<br>(letters, numbers, symbols).</html>"); feedback.setForeground(ERROR_RED); return;
             }
             if (DatabaseManager.userExists(username)) {
                 feedback.setText("Username already taken. Please choose another."); feedback.setForeground(ERROR_RED); return;
@@ -825,6 +1044,62 @@ public class BarangayWasteSystemFull extends JFrame {
         DatabaseManager.recordLogin(ts + " - " + user.getFullName() + " (" + user.getRole() + ")");
         updateSidebar(user.getFullName(), user.getRole(), user.getEmployeeId());
         dashboardGreetingLabel.setText("Welcome, " + user.getFullName() + "!");
+
+        // Add log screens now that loggedInUser is set
+        mainCardPanel.add(createWasteGiverLogScreen(), "GiverLog");
+        mainCardPanel.add(createCollectionLogScreen(), "CollectionLog");
+
+        // Set card visibility based on user role
+        String role = user.getRole();
+        if ("Administrator".equalsIgnoreCase(role)) {
+            wasteGiverCard.setVisible(true);
+            collectionLogCard.setVisible(true);
+            analyticsCard.setVisible(true);
+            mrfCard.setVisible(true);
+            cardHolder.removeAll();
+            cardHolder.setLayout(new GridLayout(2, 2, 25, 25));
+            cardHolder.add(wasteGiverCard);
+            cardHolder.add(collectionLogCard);
+            cardHolder.add(analyticsCard);
+            cardHolder.add(mrfCard);
+        } else if ("Garbage Collector".equalsIgnoreCase(role)) {
+            wasteGiverCard.setVisible(false);
+            collectionLogCard.setVisible(true);
+            analyticsCard.setVisible(true);
+            mrfCard.setVisible(true);
+            cardHolder.removeAll();
+            cardHolder.setLayout(new FlowLayout(FlowLayout.CENTER, 25, 25));
+            cardHolder.add(collectionLogCard);
+            cardHolder.add(analyticsCard);
+            cardHolder.add(mrfCard);
+        } else if ("Barangay Official".equalsIgnoreCase(role)) {
+            wasteGiverCard.setVisible(true);
+            collectionLogCard.setVisible(false);
+            analyticsCard.setVisible(false);
+            mrfCard.setVisible(true);
+            // Center the visible cards for Barangay Official
+            cardHolder.removeAll();
+            cardHolder.setLayout(new FlowLayout(FlowLayout.CENTER, 25, 25));
+            cardHolder.add(wasteGiverCard);
+            cardHolder.add(mrfCard);
+        } else {
+            // Default to all visible for unrecognized roles
+            wasteGiverCard.setVisible(true);
+            collectionLogCard.setVisible(true);
+            analyticsCard.setVisible(true);
+            mrfCard.setVisible(true);
+            cardHolder.removeAll();
+            cardHolder.setLayout(new GridLayout(2, 2, 25, 25));
+            cardHolder.add(wasteGiverCard);
+            cardHolder.add(collectionLogCard);
+            cardHolder.add(analyticsCard);
+            cardHolder.add(mrfCard);
+        }
+
+        // Refresh the card holder layout after visibility changes
+        cardHolder.revalidate();
+        cardHolder.repaint();
+
         cardLayout.show(mainCardPanel, "Dashboard");
     }
 
@@ -842,18 +1117,22 @@ public class BarangayWasteSystemFull extends JFrame {
         
         panel.add(northPanel, BorderLayout.NORTH);
         
-        JPanel cardHolder = new JPanel(new GridLayout(2, 2, 25, 25));
-        cardHolder.setBorder(new EmptyBorder(50, 50, 50, 50));
-        cardHolder.setBackground(BACKGROUND_FADE_GREEN);
+        this.cardHolder = new JPanel(new GridLayout(2, 2, 25, 25));
+        this.cardHolder.setBorder(new EmptyBorder(50, 50, 50, 50));
+        this.cardHolder.setBackground(BACKGROUND_FADE_GREEN);
 
         // Navigation Cards
-        cardHolder.add(createNavCard("📝 Waste Giver Log", "Record waste contributions from households.", PRIMARY_GREEN, "GiverLog"));
-        cardHolder.add(createNavCard("🚛 Collection Logistics", "Record truck operations, distance, and time.", DARK_GREEN, "CollectionLog"));
-        cardHolder.add(createNavCard("📊 System Analytics", "View summary of total collected waste and metrics.", LIGHT_GREEN.darker(), "Analytics"));
-        cardHolder.add(createNavCard("🚧 MRF & Truck Status", "Live monitoring and management of MRF operations.", SEPARATOR_GRAY.darker(), "MRFPlaceholder"));
+        wasteGiverCard = createNavCard("📝 Waste Giver Log", "Record waste contributions from households.", PRIMARY_GREEN, "GiverLog");
+        this.cardHolder.add(wasteGiverCard);
+        collectionLogCard = createNavCard("🚛 Collection Logistics", "Record truck operations, distance, and time.", DARK_GREEN, "CollectionLog");
+        this.cardHolder.add(collectionLogCard);
+        analyticsCard = createNavCard("📊 System Analytics", "View summary of total collected waste and metrics.", LIGHT_GREEN.darker(), "Analytics");
+        this.cardHolder.add(analyticsCard);
+        mrfCard = createNavCard("🚧 MRF & Truck Status", "Live monitoring and management of MRF operations.", SEPARATOR_GRAY.darker(), "MRFPlaceholder");
+        this.cardHolder.add(mrfCard);
 
         panel.add(createSidebar(), BorderLayout.WEST);
-        panel.add(cardHolder, BorderLayout.CENTER);
+        panel.add(this.cardHolder, BorderLayout.CENTER);
         return panel;
     }
     private JPanel createSidebar() {
@@ -901,56 +1180,13 @@ public class BarangayWasteSystemFull extends JFrame {
         viewDatabaseBtn = createStyledButton("VIEW DATABASE", INFO_BLUE, TEXT_COLOR_LIGHT);
         viewDatabaseBtn.setPreferredSize(new Dimension(200, 40));
         viewDatabaseBtn.setVisible(false);
-        viewDatabaseBtn.addActionListener(e -> {
-            java.util.List<UserInfo> users = DatabaseManager.getAllUsers();
-            java.util.List<String> entries = DatabaseManager.getLoginHistory();
-
-            StringBuilder sb = new StringBuilder("<html><body style='width:420px'><h3>Registered Users</h3><ul>");
-            if (users.isEmpty()) {
-                sb.append("<li>No users registered</li>");
-            } else {
-                for (UserInfo u : users) {
-                    sb.append("<li>")
-                      .append(u.getUsername())
-                      .append(" — ")
-                      .append(u.getFullName())
-                      .append(" (")
-                      .append(u.getRole())
-                      .append(", ")
-                      .append(u.getEmployeeId())
-                      .append(")</li>");
-                }
-            }
-            sb.append("</ul><h3>Recent Logins</h3><ul>");
-            if (entries.isEmpty()) {
-                sb.append("<li>No login activity</li>");
-            } else {
-                for (int i = entries.size() - 1; i >= 0; i--) {
-                    sb.append("<li>").append(entries.get(i)).append("</li>");
-                }
-            }
-            sb.append("</ul></body></html>");
-            JOptionPane.showMessageDialog(this, sb.toString(), "Database View", JOptionPane.INFORMATION_MESSAGE);
-        });
+        viewDatabaseBtn.addActionListener(e -> showDatabaseTableDialog());
         navPanel.add(viewDatabaseBtn);
 
         viewLoginsBtn = createStyledButton("VIEW LOGIN ACTIVITY", INFO_BLUE, TEXT_COLOR_LIGHT);
         viewLoginsBtn.setPreferredSize(new Dimension(200, 40));
         viewLoginsBtn.setVisible(false);
-        viewLoginsBtn.addActionListener(e -> {
-            java.util.List<String> entries2 = DatabaseManager.getLoginHistory();
-            if (entries2.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "No login activity recorded yet.", "Login Activity", JOptionPane.INFORMATION_MESSAGE);
-                return;
-            }
-            StringBuilder sb2 = new StringBuilder("<html><body style='width:320px'><h3>Recent Logins</h3><ul>");
-            // show most recent first
-            for (int i = entries2.size() - 1; i >= 0; i--) {
-                sb2.append("<li>").append(entries2.get(i)).append("</li>");
-            }
-            sb2.append("</ul></body></html>");
-            JOptionPane.showMessageDialog(this, sb2.toString(), "Login Activity", JOptionPane.INFORMATION_MESSAGE);
-        });
+        viewLoginsBtn.addActionListener(e -> showLoginActivityTableDialog());
         navPanel.add(viewLoginsBtn);
 
         // --- Log Out Button ---
@@ -1015,32 +1251,54 @@ public class BarangayWasteSystemFull extends JFrame {
         backWrap.add(backButton);
         headerPanel.add(backWrap, BorderLayout.WEST);
         
-        panel.add(headerPanel, BorderLayout.NORTH);
+    panel.add(headerPanel, BorderLayout.NORTH);
 
-        // --- Analytics Display (Center) ---
-        JPanel analyticsPanel = new JPanel(new GridLayout(4, 1, 10, 10));
-        analyticsPanel.setBorder(BorderFactory.createEmptyBorder(50, 50, 50, 50));
-        
-        totalWeightLabel = new JLabel("Total Collected: N/A", JLabel.CENTER);
-        totalBioLabel = new JLabel("Biodegradable: N/A", JLabel.CENTER);
-        totalRecyLabel = new JLabel("Recyclable: N/A", JLabel.CENTER);
-        totalResiLabel = new JLabel("Residual: N/A", JLabel.CENTER);
-        
-        JLabel[] dataLabels = {totalWeightLabel, totalBioLabel, totalRecyLabel, totalResiLabel};
-        for (JLabel label : dataLabels) {
-            label.setFont(FONT_TITLE.deriveFont(Font.BOLD, 26));
-            label.setForeground(TEXT_COLOR_DARK);
-            label.setOpaque(true);
-            label.setBackground(CARD_BACKGROUND);
-            label.setBorder(BorderFactory.createLineBorder(SEPARATOR_GRAY, 1, true));
-        }
+    // --- Filter Panel ---
+    JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    filterPanel.setBorder(new EmptyBorder(10, 50, 10, 50));
+    filterPanel.setBackground(BACKGROUND_FADE_GREEN);
+    JLabel filterLabel = new JLabel("Filter by Date (e.g., Jan 1): ");
+    filterLabel.setFont(FONT_PLAIN_16);
+    JTextField dateFilterField = new JTextField(10);
+    dateFilterField.setFont(FONT_PLAIN_16);
+    JButton applyFilterBtn = createStyledButton("SEARCH", PRIMARY_GREEN, Color.WHITE);
+    applyFilterBtn.addActionListener(e -> {
+        String filterText = dateFilterField.getText().trim();
+        currentFilterDate = filterText.isEmpty() ? null : filterText;
+        calculateAndDisplayAnalytics(currentFilterDate);
+    });
+    filterPanel.add(filterLabel);
+    filterPanel.add(dateFilterField);
+    filterPanel.add(applyFilterBtn);
 
-        analyticsPanel.add(totalWeightLabel);
-        analyticsPanel.add(totalBioLabel);
-        analyticsPanel.add(totalRecyLabel);
-        analyticsPanel.add(totalResiLabel);
+    // --- Analytics Display (Center) ---
+    JPanel analyticsPanel = new JPanel(new GridLayout(4, 1, 10, 10));
+    analyticsPanel.setBorder(BorderFactory.createEmptyBorder(50, 50, 50, 50));
 
-        panel.add(analyticsPanel, BorderLayout.CENTER);
+    totalWeightLabel = new JLabel("Total Collected: N/A", JLabel.CENTER);
+    totalBioLabel = new JLabel("Biodegradable: N/A", JLabel.CENTER);
+    totalRecyLabel = new JLabel("Recyclable: N/A", JLabel.CENTER);
+    totalResiLabel = new JLabel("Residual: N/A", JLabel.CENTER);
+
+    JLabel[] dataLabels = {totalWeightLabel, totalBioLabel, totalRecyLabel, totalResiLabel};
+    for (JLabel label : dataLabels) {
+        label.setFont(FONT_TITLE.deriveFont(Font.BOLD, 26));
+        label.setForeground(TEXT_COLOR_DARK);
+        label.setOpaque(true);
+        label.setBackground(CARD_BACKGROUND);
+        label.setBorder(BorderFactory.createLineBorder(SEPARATOR_GRAY, 1, true));
+    }
+
+    analyticsPanel.add(totalWeightLabel);
+    analyticsPanel.add(totalBioLabel);
+    analyticsPanel.add(totalRecyLabel);
+    analyticsPanel.add(totalResiLabel);
+
+    JPanel centerPanel = new JPanel(new BorderLayout());
+    centerPanel.add(filterPanel, BorderLayout.NORTH);
+    centerPanel.add(analyticsPanel, BorderLayout.CENTER);
+
+    panel.add(centerPanel, BorderLayout.CENTER);
         
         // Recalculate button at the bottom
         JButton refreshButton = createStyledButton("🔄 REFRESH ANALYTICS", PRIMARY_GREEN, Color.WHITE);
@@ -1121,12 +1379,241 @@ public class BarangayWasteSystemFull extends JFrame {
         return panel;
     }
 
-    
+    // ----------------- New admin dialogs and helpers -----------------
+
+    /**
+     * Shows all registered users in a table dialog, with Update and Suspend/Activate buttons.
+     *
+     * Requires DatabaseManager methods:
+     * - List<UserInfo> getAllUsers()
+     * - boolean isUserSuspended(String username)
+     * - boolean setUserSuspended(String username, boolean suspended)
+     * - boolean updateUser(UserInfo user)
+     */
+    private void showDatabaseTableDialog() {
+        List<UserInfo> users = DatabaseManager.getAllUsers();
+        String[] cols = {"Username", "Full Name", "Role", "Employee ID", "Suspended"};
+        DefaultTableModel userModel = new DefaultTableModel(cols, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false; // editing via Update dialog only
+            }
+        };
+
+        for (UserInfo u : users) {
+            boolean suspended = false;
+            try {
+                suspended = DatabaseManager.isUserSuspended(u.getUsername());
+            } catch (Exception ex) {
+                // If DB doesn't support isUserSuspended, assume false
+            }
+            userModel.addRow(new Object[]{u.getUsername(), u.getFullName(), u.getRole(), u.getEmployeeId(), suspended});
+        }
+
+        JTable userTable = createStyledTable(userModel);
+        userTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+
+        JScrollPane scroll = new JScrollPane(userTable);
+        scroll.setPreferredSize(new Dimension(700, 350));
+
+        JButton updateBtn = createStyledButton("UPDATE SELECTED", INFO_BLUE, Color.WHITE);
+        JButton suspendBtn = createStyledButton("SUSPEND/ACTIVATE", ERROR_RED, Color.WHITE);
+        JButton closeBtn = createStyledButton("CLOSE", INFO_BLUE, Color.WHITE);
+
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btnPanel.add(updateBtn);
+        btnPanel.add(suspendBtn);
+        btnPanel.add(closeBtn);
+
+        JPanel container = new JPanel(new BorderLayout(10, 10));
+        container.setBorder(new EmptyBorder(10, 10, 10, 10));
+        container.add(scroll, BorderLayout.CENTER);
+        container.add(btnPanel, BorderLayout.SOUTH);
+
+        JDialog dialog = new JDialog(this, "Registered Users", true);
+        dialog.getContentPane().add(container);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+
+        // Update selected user
+        updateBtn.addActionListener(e -> {
+            int sel = userTable.getSelectedRow();
+            if (sel < 0) {
+                JOptionPane.showMessageDialog(dialog, "Please select a user to update.", "No selection", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            int modelRow = userTable.convertRowIndexToModel(sel);
+            String username = (String) userModel.getValueAt(modelRow, 0);
+            // find matching UserInfo
+            UserInfo selected = null;
+            for (UserInfo uu : users) if (uu.getUsername().equals(username)) { selected = uu; break; }
+            if (selected == null) {
+                JOptionPane.showMessageDialog(dialog, "Selected user not found.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            openUpdateUserDialog(selected, userModel, userTable);
+        });
+
+        // Suspend / Activate toggle
+        suspendBtn.addActionListener(e -> {
+            int sel = userTable.getSelectedRow();
+            if (sel < 0) {
+                JOptionPane.showMessageDialog(dialog, "Please select a user to suspend/activate.", "No selection", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            int modelRow = userTable.convertRowIndexToModel(sel);
+            String username = (String) userModel.getValueAt(modelRow, 0);
+            boolean cur = Boolean.FALSE.equals(userModel.getValueAt(modelRow, 4)) ? false : true;
+            boolean newState = !cur;
+            // Confirm
+            int conf = JOptionPane.showConfirmDialog(dialog,
+                    (newState ? "Suspend " : "Activate ") + "user '" + username + "'?",
+                    (newState ? "Confirm Suspend" : "Confirm Activate"),
+                    JOptionPane.YES_NO_OPTION);
+            if (conf != JOptionPane.YES_OPTION) return;
+            boolean ok = false;
+            try {
+                ok = DatabaseManager.setUserSuspended(username, newState);
+            } catch (NoSuchMethodError nsme) {
+                // If DB manager doesn't implement suspension, show message and flip locally
+                JOptionPane.showMessageDialog(dialog, "DatabaseManager does not implement setUserSuspended(). Please add persistence support.", "Not implemented", JOptionPane.ERROR_MESSAGE);
+                return;
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, "Failed to change user state: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            if (ok) {
+                userModel.setValueAt(newState, modelRow, 4);
+                JOptionPane.showMessageDialog(dialog, "User '" + username + "' is now " + (newState ? "suspended." : "active."), "Success", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(dialog, "Failed to change user state. See logs.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        closeBtn.addActionListener(e -> dialog.dispose());
+
+        dialog.setVisible(true);
+    }
+
+    /**
+     * Opens a dialog to update user's editable fields and persist via DatabaseManager.updateUser(...)
+     */
+    private void openUpdateUserDialog(UserInfo user, DefaultTableModel model, JTable table) {
+        JTextField fullNameField = new JTextField(user.getFullName());
+        JComboBox<String> roleBox = new JComboBox<>(new String[]{"Barangay Official", "Garbage Collector", "Administrator"});
+        roleBox.setSelectedItem(user.getRole());
+        JTextField empIdField = new JTextField(user.getEmployeeId());
+
+        JPanel form = createFormPanel(
+                new String[]{"Username:", "Full Name:", "Role:", "Employee ID:"},
+                new JComponent[]{
+                        new JLabel(user.getUsername()),
+                        fullNameField,
+                        roleBox,
+                        empIdField
+                });
+
+        int res = JOptionPane.showConfirmDialog(this, form, "Update User: " + user.getUsername(), JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (res == JOptionPane.OK_OPTION) {
+            String newFull = fullNameField.getText().trim();
+            String newRole = (String) roleBox.getSelectedItem();
+            String newEmpId = empIdField.getText().trim();
+
+            if (newFull.isEmpty() || newRole == null || newRole.isEmpty() || newEmpId.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "All fields are required.", "Validation", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            if (!EMPLOYEE_ID_PATTERN.matcher(newEmpId).matches()) {
+                JOptionPane.showMessageDialog(this, "Employee ID must match format XXXX-XXXX.", "Validation", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            UserInfo updated = new UserInfo(newFull, newEmpId, newRole, user.getUsername(), user.getPassword());
+            boolean ok = false;
+            try {
+                ok = DatabaseManager.updateUser(updated);
+            } catch (NoSuchMethodError nsme) {
+                JOptionPane.showMessageDialog(this, "DatabaseManager.updateUser(UserInfo) not implemented. Please add persistence support.", "Not implemented", JOptionPane.ERROR_MESSAGE);
+                return;
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Failed to update user: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            if (ok) {
+                // update table row display if present
+                // find row by username
+                for (int r = 0; r < model.getRowCount(); r++) {
+                    if (model.getValueAt(r, 0).equals(user.getUsername())) {
+                        model.setValueAt(updated.getFullName(), r, 1);
+                        model.setValueAt(updated.getRole(), r, 2);
+                        model.setValueAt(updated.getEmployeeId(), r, 3);
+                        break;
+                    }
+                }
+                JOptionPane.showMessageDialog(this, "User successfully updated.", "Success", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this, "Failed to update user in database.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    /**
+     * Shows login history in a table (Timestamp | Activity)
+     * Uses DatabaseManager.getLoginHistory()
+     */
+    private void showLoginActivityTableDialog() {
+        java.util.List<String> entries = DatabaseManager.getLoginHistory();
+        if (entries == null || entries.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No login activity recorded yet.", "Login Activity", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        String[] cols = {"Timestamp", "Activity"};
+        DefaultTableModel model = new DefaultTableModel(cols, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
+
+        // Show most recent first
+        for (int i = entries.size() - 1; i >= 0; i--) {
+            String e = entries.get(i);
+            String ts = "";
+            String act = e;
+            // try parse "yyyy-MM-dd HH:mm:ss - rest"
+            int idx = e.indexOf(" - ");
+            if (idx > 0) {
+                ts = e.substring(0, idx);
+                act = e.substring(idx + 3);
+            }
+            model.addRow(new Object[]{ts, act});
+        }
+
+        JTable table = createStyledTable(model);
+        JScrollPane sp = new JScrollPane(table);
+        sp.setPreferredSize(new Dimension(600, 350));
+
+        JButton close = createStyledButton("CLOSE", INFO_BLUE, Color.WHITE);
+        JPanel btn = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btn.add(close);
+
+        JPanel container = new JPanel(new BorderLayout(8, 8));
+        container.setBorder(new EmptyBorder(10, 10, 10, 10));
+        container.add(sp, BorderLayout.CENTER);
+        container.add(btn, BorderLayout.SOUTH);
+
+        JDialog dialog = new JDialog(this, "Login Activity", true);
+        dialog.getContentPane().add(container);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+
+        close.addActionListener(ae -> dialog.dispose());
+        dialog.setVisible(true); 
+    }
+
+    // ----------------- End admin helpers -----------------
 
     public static void main(String[] args) {
         // Run the Swing application on the Event Dispatch Thread
         SwingUtilities.invokeLater(() -> new BarangayWasteSystemFull());
     }
 }
-
-

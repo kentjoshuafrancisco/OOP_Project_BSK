@@ -26,15 +26,24 @@ public class DatabaseManager {
                 List<String> lines = Files.readAllLines(USERS_FILE, StandardCharsets.UTF_8);
                 for (String line : lines) {
                     if (line.trim().isEmpty()) continue;
-                    // username|password|fullName|employeeId|role
+                    // username|password|fullName|employeeId|role|suspended
                     String[] parts = line.split("\\|", -1);
-                    if (parts.length >= 5) {
+                    if (parts.length >= 6) {
                         String username = parts[0];
                         String password = parts[1];
                         String fullName = parts[2];
                         String employeeId = parts[3];
                         String role = parts[4];
-                        users.put(username, new UserInfo(fullName, employeeId, role, username, password));
+                        boolean suspended = Boolean.parseBoolean(parts[5]);
+                        users.put(username, new UserInfo(fullName, employeeId, role, username, password, suspended));
+                    } else if (parts.length >= 5) {
+                        // Backward compatibility: if no suspended field, assume false
+                        String username = parts[0];
+                        String password = parts[1];
+                        String fullName = parts[2];
+                        String employeeId = parts[3];
+                        String role = parts[4];
+                        users.put(username, new UserInfo(fullName, employeeId, role, username, password, false));
                     }
                 }
             }
@@ -60,12 +69,12 @@ public class DatabaseManager {
         if (userExists(username)) return false;
 
         users.put(username,
-            new UserInfo(fullName, employeeId, role, username, password)
+            new UserInfo(fullName, employeeId, role, username, password, false)
         );
         // append to file for persistence
         try {
             if (!Files.exists(DATA_DIR)) Files.createDirectories(DATA_DIR);
-            String line = String.join("|", username, password, fullName, employeeId, role) + System.lineSeparator();
+            String line = String.join("|", username, password, fullName, employeeId, role, "false") + System.lineSeparator();
             Files.write(USERS_FILE, line.getBytes(StandardCharsets.UTF_8), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
         } catch (IOException ex) {
             System.err.println("Failed to persist user: " + ex.getMessage());
@@ -77,7 +86,12 @@ public class DatabaseManager {
         if (!userExists(username)) return null;
 
         UserInfo user = users.get(username);
-        return user.checkPassword(password) ? user : null;
+        if (!user.checkPassword(password)) return null;
+
+        // Check if user is suspended
+        if (isUserSuspended(username)) return null;
+
+        return user;
     }
 
     // Login activity recording (in-memory)
@@ -110,12 +124,13 @@ public class DatabaseManager {
             if (!Files.exists(DATA_DIR)) Files.createDirectories(DATA_DIR);
             StringBuilder sb = new StringBuilder();
                         for (UserInfo u : users.values()) {
-                                // username|password|fullName|employeeId|role
+                                // username|password|fullName|employeeId|role|suspended
                                 sb.append(u.getUsername()).append('|')
                                     .append(u.getPassword()).append('|')
                                     .append(u.getFullName()).append('|')
                                     .append(u.getEmployeeId()).append('|')
-                                    .append(u.getRole()).append(System.lineSeparator());
+                                    .append(u.getRole()).append('|')
+                                    .append(u.isSuspended()).append(System.lineSeparator());
                         }
             // NOTE: For safety we write passwords via registerUser append; when saving all users
             // we intentionally do not write plaintext passwords again (we write [PROTECTED])
@@ -124,5 +139,38 @@ public class DatabaseManager {
         } catch (IOException ex) {
             System.err.println("Failed to save all users: " + ex.getMessage());
         }
+    }
+
+    public static boolean updateUser(String username, String newFull, String newEmp, String newRole) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'updateUser'");
+    }
+
+    public static boolean setUserActive(String username, boolean activate) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'setUserActive'");
+    }
+
+    public static UserInfo getUser(String username) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'getUser'");
+    }
+
+    public static boolean updateUser(UserInfo updated) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'updateUser'");
+    }
+
+    public static boolean setUserSuspended(String username, boolean newState) {
+        if (!userExists(username)) return false;
+        UserInfo user = users.get(username);
+        user.setSuspended(newState);
+        saveAllUsers(); // Persist the change
+        return true;
+    }
+
+    public static boolean isUserSuspended(String username) {
+        if (!userExists(username)) return false;
+        return users.get(username).isSuspended();
     }
 }

@@ -1,0 +1,2 @@
+admin|password123|System Administrator|ADM1-0001|Administrator
+juan|password123|Juan Dela Cruz|TRK0-0005|Garbage Collector

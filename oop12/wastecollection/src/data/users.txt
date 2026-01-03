@@ -1,0 +1,4 @@
+jayjay|password123|Jayjay Reyes|TRK0-0006|Garbage Collector|false
+oya123|password123|Oya Santos|BRGY-0001|Barangay Official|false
+admin|password123|System Administrator|ADM1-0001|Administrator|false
+juan|password123|Juan Dela Cruz|TRK0-0005|Garbage Collector|false
